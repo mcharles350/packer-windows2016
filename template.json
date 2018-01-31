@@ -1,0 +1,208 @@
+{
+  "description": "Windows Server 2016",  
+  "min_packer_version" : "0.12.0",
+    
+    "_comment": "Building Windows Server 2016 AMI for corporate purposes only!!",  
+    "builders": [
+      {
+        "type": "amazon-ebs",
+
+        "access_key" : "{{user `AWS_ACCESS_KEY_ID`}}",
+        "secret_key" : "{{user `AWS_SECRET_KEY`}}",
+
+        "region": "{{user `region`}}",
+        "vpc_id" : "{{user `vpc`}}",
+        "availability_zone" : "{{user `availability_zone`}}",
+        "subnet_id" : "{{user `subnet`}}",
+        "security_group_id" : "{{user `security_group`}}",
+        "associate_public_ip_address" : false,
+
+        "ami_name": "Windows_2016-AP-GOLD-{{isotime \"2006-01-02\"}}",
+        "source_ami" :  "",
+        "source_ami_filter": {
+          "filters": {
+            "virtualization-type": "hvm",
+            "name": "*Windows_Server-2016-English-Full-Base-*",
+            "root-device-type": "ebs"
+          },
+          "owners": ["801119661308"],
+          "most_recent": true
+        },
+
+        "force_deregister"  : true,
+        
+        "instance_type": "t2.large",
+        "temporary_key_pair_name" : "{{user `temporary_key_pair_name`}}",
+        "launch_block_device_mappings"  : [
+          {
+              "device_name" : "/dev/sda1",
+              "volume_size" : 50,
+              "volume_type" : "gp2",
+              "delete_on_termination" : true
+          }
+        ],
+
+        "communicator" : "winrm",
+        "winrm_port"  : 5986,
+        "winrm_username" : "Administrator",
+        "winrm_timeout" : "30m",
+        "winrm_use_ssl" : true,
+        "winrm_insecure"  : true,
+
+        "user_data_file" : "userdata/userdata.txt",
+        "windows_password_timeout" : "20m",
+
+        "ami_description" : "Windows Server 2016 pre-baked AMI build",
+
+        "run_tags"  : {
+          "Name" : "Windows_2016-AP-GOLD-{{isotime \"2006-01-02\"}}",
+          "Cost Center" : "N/A",
+          "Customer Facing" : "No",
+          "Environment" : "QA",
+          "Role" : "AMI BUILD",
+          "Service" : "EC2",
+          "Support Team" : "techgssserver@ap.org",
+          "OS" : "Windows Server 2016"
+        },
+
+        "run_volume_tags" : {
+          "Name": "Windows_2016-AP-GOLD-{{isotime \"2006-01-02\"}}",
+          "Cost Center": "N/A",
+          "Customer Facing": "No",
+          "Environment": "QA",
+          "Role": "VOLUME",
+          "Service": "EC2",
+          "Support Team": "techgssserver@ap.org",
+          "OS": "Windows Server 2016"          
+        },
+
+        "ami_users" : [
+          "720322524327",
+          "838870929816",
+          "222259241209",
+          "557187967306",
+          "576439789282",
+          "959162376654",
+          "656041960331",
+          "198401342403",
+          "134056038641",
+          "903501326418",
+          "185351644654",
+          "201356851952",
+          "304498741827",
+          "882018314208",
+          "462561078695",
+          "699694540698"
+        ],
+
+        "tags"  : {
+            "Name" : "Windows_2016-AP-GOLD-{{isotime \"2006-01-02\"}}",
+            "Cost Center" : "N/A",
+            "Customer Facing" : "No",
+            "Environment" : "QA",
+            "Role" : "AMI",
+            "Service" : "EC2",
+            "Support Team" : "techgssserver@ap.org",
+            "OS" : "Windows Server 2016"
+          }
+        }
+  ],
+
+  "provisioners" : [
+    {
+      "type"  : "powershell",
+      "inline"  : [
+        "New-Item -Path C:/apps -ItemType Directory -Force | Out-Null",
+        "New-Item -Path C:/apps/puppet -ItemType Directory -Force | Out-Null",        
+        "New-Item -Path C:/opt -ItemType Directory -Force | Out-Null",
+        "New-Item -Path C:/opt/sensu -ItemType Directory -Force | Out-Null",
+        "New-Item -Path C:/opt/sensu/conf.d -ItemType Directory -Force | Out-Null"
+      ]
+    },
+    {
+      "type"  : "file",
+      "source"  : "scripts/client.json",
+      "destination" : "C:/opt/sensu/conf.d/client.json"
+    },
+    {
+      "type"  : "file",
+      "source"  : "scripts/sensu-client.xml",
+      "destination" : "C:/apps/sensu-client.xml"
+    },
+    {
+      "type": "file",
+      "source": "scripts/apps.ps1",
+      "destination": "C:/apps/apps.ps1"
+    },    
+    {
+      "type": "file",
+      "source": "puppet/downloads.pp",
+      "destination": "C:/apps/puppet/downloads.pp"
+    },
+    {
+      "type": "file",
+      "source": "puppet/package.pp",
+      "destination": "C:/apps/puppet/package.pp"
+    },    
+    {
+      "type" : "powershell",          
+      "inline" : [
+        "cd /",
+        "cd C:/apps",
+        "Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force -WarningAction SilentlyContinue",
+        "./apps.ps1"
+      ]
+    },      
+    {
+      "type" : "windows-restart",
+      "restart_command" : "shutdown /r /t 5 && net stop winrm",
+      "restart_timeout" : "10m"
+    },
+    {
+      "type" : "windows-shell",
+      "inline" : [
+        "puppet module install puppet-download_file --version 2.1.0"
+      ]
+    },
+    {
+      "type": "windows-restart",
+      "restart_command": "shutdown /r /t 5 && net stop winrm",      
+      "restart_timeout": "10m"
+    },
+    {
+      "type"  :"windows-shell",
+      "inline"  :[
+        "cd /",
+        "cd C:/apps/puppet",
+        "puppet apply downloads.pp"
+      ]
+    },
+    {
+      "type": "windows-shell",
+      "inline": [
+        "cd /",
+        "cd C:/apps/puppet",
+        "puppet apply package.pp"
+      ]
+    },      
+    {
+      "type": "powershell",
+      "inline": [
+        "Move-Item C:/apps/sensu-client.xml C:/opt/sensu/bin -Force",
+        "New-Service -Name 'Sensu-Client' -StartupType Manual -BinaryPathName 'C:/opt/sensu/bin/sensu-client.exe' -DisplayName 'Sensu Client' -Description 'Enables monitoring for a computer by Sensu.'"
+      ]
+    },        
+    {
+      "type" : "powershell",
+      "script" : "scripts/prepare.ps1",
+      "remote_path" : "C:/Windows/Temp/script.ps1"    
+    },
+    {
+      "type" : "powershell",
+      "inline" : [
+        "C:/ProgramData/Amazon/EC2-Windows/Launch/Scripts/InitializeInstance.ps1 -Schedule",
+        "C:/ProgramData/Amazon/EC2-Windows/Launch/Scripts/SysprepInstance.ps1 -NoShutdown"
+      ]
+    }
+  ]
+}
